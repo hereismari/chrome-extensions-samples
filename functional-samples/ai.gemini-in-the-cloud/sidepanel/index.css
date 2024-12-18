@@ -15,6 +15,14 @@ select {
   font-size: inherit;
 }
 
+img {
+  border-radius: 8px;
+  max-width: 200px;
+  max-height: 200px;
+  padding: 8px;
+  margin: 16px 0;
+}
+
 button {
   background: #333;
   color: white;

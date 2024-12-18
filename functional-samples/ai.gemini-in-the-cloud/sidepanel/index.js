@@ -4,6 +4,8 @@ import {
   HarmCategory
 } from '../node_modules/@google/generative-ai/dist/index.mjs';
 
+import { Buffer } from '../node_modules/buffer/';
+
 // Important! Do not expose your API in your extension code. You have to
 // options:
 //
@@ -22,6 +24,8 @@ let generationConfig = {
   temperature: 1
 };
 
+const supportedImageTypes = new Set(["png", "jpeg", "webp", "heic", "heif"]);
+
 const inputPrompt = document.body.querySelector('#input-prompt');
 const buttonPrompt = document.body.querySelector('#button-prompt');
 const elementResponse = document.body.querySelector('#response');
@@ -29,6 +33,18 @@ const elementLoading = document.body.querySelector('#loading');
 const elementError = document.body.querySelector('#error');
 const sliderTemperature = document.body.querySelector('#temperature');
 const labelTemperature = document.body.querySelector('#label-temperature');
+const imagePreview = document.getElementById('image-preview');
+const imageToUpload = document.getElementById('image-to-upload')
+const statusDiv = document.getElementById('upload-status');
+
+let imageStr = '';
+let imageFormat = '';
+
+function resetImage() {
+  imageFormat = '';
+  imageStr = '';
+  imagePreview.src = '';
+}
 
 function initModel(generationConfig) {
   const safetySettings = [
@@ -39,7 +55,7 @@ function initModel(generationConfig) {
   ];
   genAI = new GoogleGenerativeAI(apiKey);
   model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-2.0-flash-exp',
     safetySettings,
     generationConfig
   });
@@ -48,7 +64,24 @@ function initModel(generationConfig) {
 
 async function runPrompt(prompt) {
   try {
-    const result = await model.generateContent(prompt);
+
+    let inputData;
+    if (imageStr && imageFormat) {
+      inputData = [
+        {
+          inlineData: {
+            data: Buffer.from(imageStr).toString('base64'),
+            mimeType: "image/" + imageFormat,
+          },
+        },
+        prompt,
+      ]
+    }
+    else {
+      inputData = prompt;
+    }
+
+    const result = await model.generateContent(inputData);
     const response = await result.response;
     return response.text();
   } catch (e) {
@@ -70,6 +103,50 @@ inputPrompt.addEventListener('input', () => {
   } else {
     buttonPrompt.setAttribute('disabled', '');
   }
+});
+
+
+imageToUpload.addEventListener('change', (event) => {
+  const file = event.target.files[0];
+
+  if (!file) {
+    statusDiv.textContent = "Please select a file.";
+    resetImage();
+    return;
+  }
+
+  // Check image has a valid format and set the image format to be sent to the Gemini API.
+  let validImage = false;
+  for (const supportedImageType of supportedImageTypes.values()) {
+    if (file.type.startsWith('image/' + supportedImageType)) {
+      console.log(supportedImageType);
+      validImage = true;
+      imageFormat = supportedImageType;
+    }
+  }
+  if (!validImage) {
+    statusDiv.textContent = "Please select an image with a valid format. Supported formats are: " + Array.from(supportedImageTypes).join(', ')
+    resetImage();
+    return;
+  }
+
+  // Clear any error message.
+  statusDiv.textContent = '';
+
+  // Read image path to show in client-side preview
+  const preview_reader = new FileReader();
+  preview_reader.onload = (e) => {
+    imagePreview.src = e.target.result;
+    imagePreview.style.display = 'block';
+  }
+  preview_reader.readAsDataURL(file);
+
+  // Read actual image to be sent to the Gemini API.
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    imageStr = e.target.result;
+  }
+  reader.readAsArrayBuffer(file);
 });
 
 buttonPrompt.addEventListener('click', async () => {
